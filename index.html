@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Optimal Indian Railway Route Finder | High-Speed Transit Planner</title>
+  
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Calculate and visualize the fastest, cheapest, shortest, or most direct railway routes between major Indian junctions. Beautiful glassmorphic design and real-time transit schedule visualizer.">
+  <meta name="keywords" content="Indian Railways, Route Finder, Optimal Path, Dijkstra, Train Schedule, IRCTC, Transit Planner, India Map, Interactive Transit">
+  <meta name="author" content="Antigravity AI">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Premium Header -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <i class="fa-solid fa-train-subway" style="color: #070913;"></i>
+      </div>
+      <div class="logo-text">
+        <h1>RAILWAY ROUTE FINDER</h1>
+        <span>Indian Junction Path Optimizer</span>
+      </div>
+    </div>
+    <div class="badge" id="system-status">
+      Transit Engine Active
+    </div>
+  </header>
+
+  <!-- Dashboard Grid -->
+  <main class="dashboard">
+    
+    <!-- Left Sidebar: Search & Presets -->
+    <aside class="panel" aria-label="Search Controls">
+      
+      <!-- Search Form -->
+      <section class="card" id="search-section">
+        <h2 class="card-title">
+          <i class="fa-solid fa-route"></i> Route Optimizer
+        </h2>
+        
+        <form id="route-form" onsubmit="return false;">
+          
+          <div class="form-group">
+            <label for="source-select">Source Junction</label>
+            <div class="select-wrapper">
+              <select id="source-select" required>
+                <option value="" disabled selected>Select departure station...</option>
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-group" style="position: relative;">
+            <label for="dest-select">Destination Junction</label>
+            <div class="select-wrapper">
+              <select id="dest-select" required>
+                <option value="" disabled selected>Select destination station...</option>
+                <!-- Dynamically populated -->
+              </select>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Optimization Goal</label>
+            <div class="criteria-grid" id="criteria-grid">
+              <div class="criteria-option active" data-criteria="fastest" title="Minimize total time (wait + travel)">
+                <i class="fa-regular fa-clock"></i>
+                <span>Fastest</span>
+              </div>
+              <div class="criteria-option" data-criteria="cheapest" title="Minimize total ticket fare">
+                <i class="fa-solid fa-indian-rupee-sign"></i>
+                <span>Cheapest</span>
+              </div>
+              <div class="criteria-option" data-criteria="shortest" title="Minimize physical track distance">
+                <i class="fa-solid fa-ruler-horizontal"></i>
+                <span>Shortest</span>
+              </div>
+              <div class="criteria-option" data-criteria="transfers" title="Minimize train changes">
+                <i class="fa-solid fa-shuffle"></i>
+                <span>Directness</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Preferred Travel Class</label>
+            <div class="class-selector" id="class-selector">
+              <div class="class-option" data-class="SL" title="Sleeper Class">SL</div>
+              <div class="class-option active" data-class="3A" title="AC 3 Tier">3AC</div>
+              <div class="class-option" data-class="2A" title="AC 2 Tier">2AC</div>
+              <div class="class-option" data-class="1A" title="AC First Class">1AC</div>
+            </div>
+          </div>
+          
+          <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <div>
+              <label for="start-day">Start Day</label>
+              <div class="select-wrapper">
+                <select id="start-day">
+                  <option value="Mon">Monday</option>
+                  <option value="Tue">Tuesday</option>
+                  <option value="Wed">Wednesday</option>
+                  <option value="Thu">Thursday</option>
+                  <option value="Fri">Friday</option>
+                  <option value="Sat">Saturday</option>
+                  <option value="Sun">Sunday</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="start-time">Start Time</label>
+              <input type="time" id="start-time" value="08:00">
+            </div>
+          </div>
+          
+          <button type="submit" class="btn-primary" id="btn-calculate">
+            <i class="fa-solid fa-compass animate-spin-hover"></i> Optimize Journey
+          </button>
+          
+        </form>
+      </section>
+
+      <!-- Presets Section -->
+      <section class="card" id="presets-section">
+        <h2 class="card-title">
+          <i class="fa-regular fa-star"></i> Popular Routes
+        </h2>
+        <div class="presets-list" id="presets-list">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+      
+    </aside>
+
+    <!-- Center Section: Interactive Map Canvas -->
+    <section class="map-panel" aria-label="Interactive Map of India">
+      <div class="map-instructions">
+        <strong><i class="fa-solid fa-circle-info"></i> Interactive Transit Map</strong>
+        Click a node to select <strong>Source</strong>.<br>
+        Double-click or Shift-Click to set <strong>Destination</strong>.
+      </div>
+      
+      <div class="map-container" id="map-container">
+        <svg class="svg-map" id="map-svg" viewBox="0 0 800 900">
+          <defs>
+            <!-- Sleek Node Radial Shadows -->
+            <radialGradient id="node-shadow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="var(--primary)" stop-opacity="0.3"></stop>
+              <stop offset="100%" stop-color="var(--primary)" stop-opacity="0"></stop>
+            </radialGradient>
+          </defs>
+          
+          <!-- Background Grid for High Tech Style -->
+          <g class="map-bg-grid" id="bg-grid"></g>
+          
+          <!-- Route Connecting Lines -->
+          <g id="edges-group"></g>
+          
+          <!-- Active Pulsing Rings -->
+          <circle id="pulse-source" class="pulse-ring" r="0"></circle>
+          <circle id="pulse-dest" class="pulse-ring dest" r="0"></circle>
+          
+          <!-- Stations Nodes -->
+          <g id="nodes-group"></g>
+        </svg>
+      </div>
+
+      <!-- Map Control Overlays -->
+      <div class="map-controls">
+        <button class="map-btn" id="map-zoom-in" title="Zoom In"><i class="fa-solid fa-plus"></i></button>
+        <button class="map-btn" id="map-zoom-out" title="Zoom Out"><i class="fa-solid fa-minus"></i></button>
+        <button class="map-btn" id="map-reset" title="Recenter Map"><i class="fa-solid fa-arrows-to-eye"></i></button>
+      </div>
+      
+      <!-- Floating Map Tooltip -->
+      <div class="tooltip" id="map-tooltip"></div>
+    </section>
+
+    <!-- Right Sidebar: Itinerary & Timeline -->
+    <aside class="panel right" aria-label="Journey Results">
+      
+      <!-- Route Statistics Summary -->
+      <section class="card" id="results-card" style="display: none;">
+        <h2 class="card-title">
+          <i class="fa-solid fa-circle-check"></i> Optimal Route Details
+        </h2>
+        
+        <div class="results-summary">
+          <div class="stat-box">
+            <div class="stat-label">Total Time</div>
+            <div class="stat-val primary" id="summary-time">--</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Ticket Cost</div>
+            <div class="stat-val secondary" id="summary-fare">--</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Track Distance</div>
+            <div class="stat-val" id="summary-distance">--</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Transfers</div>
+            <div class="stat-val" id="summary-transfers">--</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Detailed Itinerary Timeline -->
+      <section class="card" style="flex-grow: 1; display: flex; flex-direction: column; overflow: hidden;" id="itinerary-card">
+        <h2 class="card-title">
+          <i class="fa-solid fa-list-check"></i> Travel Itinerary
+        </h2>
+        <div class="timeline-container" id="timeline-container" style="flex-grow: 1; overflow-y: auto; padding-right: 0.25rem;">
+          <!-- Initially empty state, populated on calculate -->
+          <div class="empty-state">
+            <i class="fa-solid fa-train"></i>
+            <p>Define departure and destination stations to compute the optimal route.</p>
+          </div>
+        </div>
+      </section>
+      
+    </aside>
+    
+  </main>
+
+  <!-- Load Scripts -->
+  <script src="data.js"></script>
+  <script src="routing.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
