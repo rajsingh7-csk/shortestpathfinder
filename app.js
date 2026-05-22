@@ -1,5 +1,6 @@
 // App Controller - Indian Railway Route Finder
 // Integrates SVG Map rendering, zoom/pan controls, UI state sync, and path calculations.
+// Mobile-optimized with touch support and responsive interactions.
 
 // State variables
 let currentSource = "";
@@ -15,6 +16,11 @@ let zoomScale = 1.0;
 let isDragging = false;
 let startDragX = 0;
 let startDragY = 0;
+let lastDistance = 0; // for pinch zoom
+
+// Mobile detection
+const isMobile = () => window.innerWidth <= 768;
+const isSmallMobile = () => window.innerWidth <= 480;
 
 // Coordinate Projection: Maps Lat/Lon to SVG (800x900) coordinates
 // Boundaries adjusted to fit the geometric shape of India
@@ -30,6 +36,14 @@ function project(lat, lon) {
   return { x, y };
 }
 
+// Get touch distance for pinch zoom
+function getTouchDistance(e) {
+  if (e.touches.length < 2) return 0;
+  const dx = e.touches[0].clientX - e.touches[1].clientX;
+  const dy = e.touches[0].clientY - e.touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 // Initialize Application
 document.addEventListener("DOMContentLoaded", () => {
   populateDropdowns();
@@ -39,11 +53,28 @@ document.addEventListener("DOMContentLoaded", () => {
   renderSVGMap();
   setupMapInteraction();
   setupFormHandler();
+  setupTouchHandlers();
   
   // Set default initial values
   setSearchState("NDLS", "MMCT", "fastest", "3A");
-  calculateJourney();
+  if (!isMobile()) {
+    calculateJourney();
+  }
+  
+  // Handle window resize for responsive adjustments
+  window.addEventListener('resize', handleWindowResize);
 });
+
+function handleWindowResize() {
+  const mapLayers = document.getElementById('map-layers');
+  if (mapLayers && isMobile() && zoomScale > 1.5) {
+    // Auto-reset zoom on mobile when resizing
+    panX = 0;
+    panY = 0;
+    zoomScale = 1.0;
+    applyTransform();
+  }
+}
 
 // Populate Dropdown inputs with sorted station lists
 function populateDropdowns() {
@@ -119,10 +150,11 @@ function renderSVGMap() {
   
   // 1. Draw a technical background grid
   let gridContent = "";
-  for (let i = 50; i < 800; i += 50) {
+  const gridStep = isMobile() ? 100 : 50;
+  for (let i = gridStep; i < 800; i += gridStep) {
     gridContent += `<line x1="${i}" y1="0" x2="${i}" y2="900" class="map-bg-grid"></line>`;
   }
-  for (let j = 50; j < 900; j += 50) {
+  for (let j = gridStep; j < 900; j += gridStep) {
     gridContent += `<line x1="0" y1="${j}" x2="800" y2="${j}" class="map-bg-grid"></line>`;
   }
   bgGrid.innerHTML = gridContent;
@@ -171,27 +203,33 @@ function setupMapInteraction() {
   const tooltip = document.getElementById("map-tooltip");
   
   // Group elements to be scaled/panned together
-  const mapLayers = document.createElementNS("http://www.w3.org/2000/svg", "g");
-  mapLayers.id = "map-layers";
-  
-  // Move edges, grid, pulsing rings, and nodes inside this single parent group
-  const bgGrid = document.getElementById("bg-grid");
-  const edgesGroup = document.getElementById("edges-group");
-  const pulseSrc = document.getElementById("pulse-source");
-  const pulseDst = document.getElementById("pulse-dest");
-  const nodesGroup = document.getElementById("nodes-group");
-  
-  mapSvg.appendChild(mapLayers);
-  mapLayers.appendChild(bgGrid);
-  mapLayers.appendChild(edgesGroup);
-  mapLayers.appendChild(pulseSrc);
-  mapLayers.appendChild(pulseDst);
-  mapLayers.appendChild(nodesGroup);
+  let mapLayers = document.getElementById('map-layers');
+  if (!mapLayers) {
+    mapLayers = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    mapLayers.id = "map-layers";
+
+    // Move edges, grid, pulsing rings, and nodes inside this single parent group
+    const bgGrid = document.getElementById("bg-grid");
+    const edgesGroup = document.getElementById("edges-group");
+    const pulseSrc = document.getElementById("pulse-source");
+    const pulseDst = document.getElementById("pulse-dest");
+    const nodesGroup = document.getElementById("nodes-group");
+    
+    mapSvg.appendChild(mapLayers);
+    mapLayers.appendChild(bgGrid);
+    mapLayers.appendChild(edgesGroup);
+    mapLayers.appendChild(pulseSrc);
+    mapLayers.appendChild(pulseDst);
+    mapLayers.appendChild(nodesGroup);
+  }
   
   // Apply visual matrix transform
   function applyTransform() {
     mapLayers.setAttribute("transform", `translate(${panX}, ${panY}) scale(${zoomScale})`);
   }
+  
+  // Store applyTransform in window scope for touch handlers
+  window.applyTransform = applyTransform;
   
   // Zoom Controls
   document.getElementById("map-zoom-in").addEventListener("click", () => {
@@ -211,7 +249,7 @@ function setupMapInteraction() {
     applyTransform();
   });
   
-  // Drag to Pan logic
+  // Desktop Mouse: Drag to Pan logic
   mapContainer.addEventListener("mousedown", (e) => {
     // Only pan on left click background drag, not node click
     if (e.target.classList.contains("node")) return;
@@ -231,7 +269,7 @@ function setupMapInteraction() {
     isDragging = false;
   });
   
-  // Scroll to zoom
+  // Desktop Mouse: Scroll to zoom
   mapContainer.addEventListener("wheel", (e) => {
     e.preventDefault();
     const zoomFactor = 0.05;
@@ -248,29 +286,31 @@ function setupMapInteraction() {
     const code = node.dataset.code;
     const s = STATIONS[code];
     
-    // Hover Tooltip
-    node.addEventListener("mouseenter", (e) => {
-      tooltip.style.display = "block";
-      tooltip.innerHTML = `
-        <div class="tooltip-title">${s.name} (${s.code})</div>
-        <div class="tooltip-subtitle">City: ${s.city} | Zone: ${s.zone}</div>
-      `;
-      positionTooltip(e);
+    // Hover Tooltip (Desktop only)
+    if (!isMobile()) {
+      node.addEventListener("mouseenter", (e) => {
+        tooltip.style.display = "block";
+        tooltip.innerHTML = `
+          <div class="tooltip-title">${s.name} (${s.code})</div>
+          <div class="tooltip-subtitle">City: ${s.city} | Zone: ${s.zone}</div>
+        `;
+        positionTooltip(e);
+        
+        // Temporary highlight connecting lines for inspection
+        highlightConnectingEdges(code, true);
+      });
       
-      // Temporary highlight connecting lines for inspection
-      highlightConnectingEdges(code, true);
-    });
+      node.addEventListener("mousemove", (e) => {
+        positionTooltip(e);
+      });
+      
+      node.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+        highlightConnectingEdges(code, false);
+      });
+    }
     
-    node.addEventListener("mousemove", (e) => {
-      positionTooltip(e);
-    });
-    
-    node.addEventListener("mouseleave", () => {
-      tooltip.style.display = "none";
-      highlightConnectingEdges(code, false);
-    });
-    
-    // Click selection: Single click selects Source, Double/Shift click selects Destination
+    // Click selection: Single click selects Source, Shift click selects Destination
     node.addEventListener("click", (e) => {
       if (e.shiftKey || (currentSource && !currentDestination)) {
         // Set Destination
@@ -299,6 +339,57 @@ function setupMapInteraction() {
     tooltip.style.left = `${x}px`;
     tooltip.style.top = `${y}px`;
   }
+}
+
+// Touch handlers for mobile
+function setupTouchHandlers() {
+  const mapContainer = document.getElementById("map-container");
+  
+  mapContainer.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 1) {
+      // Single touch - pan
+      isDragging = true;
+      startDragX = e.touches[0].clientX - panX;
+      startDragY = e.touches[0].clientY - panY;
+    } else if (e.touches.length === 2) {
+      // Two finger touch - pinch zoom
+      isDragging = false;
+      lastDistance = getTouchDistance(e);
+    }
+  });
+  
+  mapContainer.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 1 && isDragging) {
+      e.preventDefault();
+      // Single touch pan
+      panX = e.touches[0].clientX - startDragX;
+      panY = e.touches[0].clientY - startDragY;
+      window.applyTransform();
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      // Two finger pinch zoom
+      const currentDistance = getTouchDistance(e);
+      if (lastDistance > 0) {
+        const zoomFactor = currentDistance / lastDistance;
+        zoomScale = Math.max(0.5, Math.min(4.0, zoomScale * (1 + (zoomFactor - 1) * 0.1)));
+        window.applyTransform();
+      }
+      lastDistance = currentDistance;
+    }
+  });
+  
+  mapContainer.addEventListener("touchend", (e) => {
+    isDragging = false;
+    lastDistance = 0;
+  });
+  
+  // Prevent default touch behaviors that interfere with interaction
+  mapContainer.addEventListener("touchstart", (e) => {
+    if (e.target.classList.contains("node")) {
+      // Allow node clicks
+      e.preventDefault();
+    }
+  }, { passive: false });
 }
 
 // Temporary highlight adjacent connections when hovering over a node
@@ -460,6 +551,16 @@ function calculateJourney() {
   
   // 4. Highlight path in the SVG network
   highlightPath(result);
+  
+  // 5. On mobile, scroll to results
+  if (isMobile()) {
+    setTimeout(() => {
+      const resultsCard = document.getElementById("results-card");
+      if (resultsCard) {
+        resultsCard.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+  }
 }
 
 // Render Detailed Travel Itinerary
